@@ -177,6 +177,19 @@ app.delete("/scheduled/:id", async (req: Request, res: Response) => {
   }
 });
 
+// List all delivered messages
+app.get("/delivered", async (_req: Request, res: Response) => {
+  try {
+    const results = await redis.hvals("delivered_messages");
+    const messages = results.map((msgStr) => JSON.parse(msgStr));
+    res.status(200).json({ messages });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ error: "Failed to fetch delivered messages", details: error });
+  }
+});
+
 // Socket.IO connection handler (optional logging)
 io.on("connection", (socket) => {
   console.log("A client connected:", socket.id);
