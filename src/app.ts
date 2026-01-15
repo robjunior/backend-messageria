@@ -1,4 +1,3 @@
-dev/backend/src/app.ts
 import express from "express";
 import scheduledRoutes from "./routes/scheduled";
 import deliveredRoutes from "./routes/delivered";

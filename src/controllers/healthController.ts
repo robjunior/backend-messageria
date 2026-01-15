@@ -1,4 +1,3 @@
-dev/backend/src/controllers/healthController.ts
 import { Request, Response } from "express";
 import { getRedis } from "../services/redisService";
 

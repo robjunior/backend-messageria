@@ -1,4 +1,3 @@
-dev/backend/src/routes/scheduled.ts
 import { Router } from "express";
 import * as scheduledController from "../controllers/scheduledController";
 
