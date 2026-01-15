@@ -91,6 +91,61 @@ app.get("/scheduled", async (_req: Request, res: Response) => {
   }
 });
 
+// Atualizar mensagem agendada por ID
+app.put("/scheduled/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { recipient, message, sendAt, channel } = req.body;
+
+  try {
+    // Buscar todas as mensagens agendadas
+    const results = await redis.zrange("scheduled_messages", 0, -1);
+    let foundMsg: any = null;
+    let foundMsgStr: string | null = null;
+
+    for (const msgStr of results) {
+      const msg = JSON.parse(msgStr);
+      if (msg.id === id) {
+        foundMsg = msg;
+        foundMsgStr = msgStr;
+        break;
+      }
+    }
+
+    if (!foundMsg || !foundMsgStr) {
+      return res.status(404).json({ error: "Mensagem não encontrada" });
+    }
+
+    // Atualizar campos fornecidos
+    const updatedMsg = {
+      ...foundMsg,
+      recipient: recipient ?? foundMsg.recipient,
+      message: message ?? foundMsg.message,
+      sendAt: sendAt ?? foundMsg.sendAt,
+      channel: channel ?? foundMsg.channel,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Remover mensagem antiga
+    await redis.zrem("scheduled_messages", foundMsgStr);
+
+    // Adicionar mensagem atualizada com novo horário (score)
+    await redis.zadd(
+      "scheduled_messages",
+      updatedMsg.sendAt,
+      JSON.stringify(updatedMsg),
+    );
+
+    // Emitir evento de atualização em tempo real
+    io.emit("messageUpdated", updatedMsg);
+
+    res.status(200).json({ success: true, data: updatedMsg });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ error: "Falha ao atualizar mensagem agendada", details: error });
+  }
+});
+
 // Delete (cancel) a scheduled message by ID
 app.delete("/scheduled/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
