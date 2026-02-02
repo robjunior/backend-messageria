@@ -26,8 +26,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// Make io accessible throughout the app if needed
-export { io, server };
+// Socket.IO and server are intentionally not exported to avoid accidental imports in app/tests
 
 // Start server
 server.listen(port, () => {
