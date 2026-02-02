@@ -3,7 +3,9 @@ import app from "../src/app";
 
 describe("Failed Messages Endpoints", () => {
   it("GET /failed should list all failed messages", async () => {
-    const res = await request(app).get("/failed");
+    const res = await request(app)
+      .get("/failed")
+      .set("x-tenant-id", "test-tenant");
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.messages)).toBe(true);
     // Optionally, check for status property if any failed messages exist
