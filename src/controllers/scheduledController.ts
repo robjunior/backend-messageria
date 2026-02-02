@@ -1,9 +1,8 @@
-dev / backend / src / controllers / scheduledController.ts;
 import { Request, Response } from "express";
 import { io } from "../server";
 import { getRedis } from "../services/redisService";
 import { getTenantId, tenantKey } from "../services/tenantService";
-import { v4 as uuidv4 } from "uuid";
+const { v4: uuidv4 } = require("uuid");
 
 /**
  * Schedule a new message for a tenant
@@ -15,11 +14,9 @@ export const scheduleMessage = async (req: Request, res: Response) => {
 
     const { recipient, message, sendAt, channel } = req.body;
     if (!recipient || !message || !sendAt || !channel) {
-      return res
-        .status(400)
-        .json({
-          error: "recipient, message, sendAt, and channel are required",
-        });
+      return res.status(400).json({
+        error: "recipient, message, sendAt, and channel are required",
+      });
     }
 
     const id = uuidv4();
@@ -58,12 +55,10 @@ export const getAllScheduled = async (req: Request, res: Response) => {
     const messages = results.map((msgStr: string) => JSON.parse(msgStr));
     res.status(200).json({ messages });
   } catch (error: any) {
-    res
-      .status(500)
-      .json({
-        error: "Failed to fetch scheduled messages",
-        details: error.message,
-      });
+    res.status(500).json({
+      error: "Failed to fetch scheduled messages",
+      details: error.message,
+    });
   }
 };
 
@@ -114,12 +109,10 @@ export const updateScheduled = async (req: Request, res: Response) => {
     io.emit("messageUpdated", updatedMsg);
     res.status(200).json({ success: true, data: updatedMsg });
   } catch (error: any) {
-    res
-      .status(500)
-      .json({
-        error: "Failed to update scheduled message",
-        details: error.message,
-      });
+    res.status(500).json({
+      error: "Failed to update scheduled message",
+      details: error.message,
+    });
   }
 };
 
@@ -156,11 +149,9 @@ export const deleteScheduled = async (req: Request, res: Response) => {
       res.status(404).json({ error: "Message not found" });
     }
   } catch (error: any) {
-    res
-      .status(500)
-      .json({
-        error: "Failed to delete scheduled message",
-        details: error.message,
-      });
+    res.status(500).json({
+      error: "Failed to delete scheduled message",
+      details: error.message,
+    });
   }
 };
