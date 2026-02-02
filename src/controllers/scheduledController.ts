@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { io } from "../server";
+
 import { getRedis } from "../services/redisService";
 import { getTenantId, tenantKey } from "../services/tenantService";
 import { v4 as uuidv4 } from "uuid";
@@ -33,7 +33,6 @@ export const scheduleMessage = async (req: Request, res: Response) => {
 
     const redis = getRedis();
     await redis.zadd(scheduledKey, sendAt, JSON.stringify(msgData));
-    io.emit("messageScheduled", msgData);
     res.status(201).json({ success: true, id, data: msgData });
   } catch (error: any) {
     res
@@ -106,7 +105,6 @@ export const updateScheduled = async (req: Request, res: Response) => {
       updatedMsg.sendAt,
       JSON.stringify(updatedMsg),
     );
-    io.emit("messageUpdated", updatedMsg);
     res.status(200).json({ success: true, data: updatedMsg });
   } catch (error: any) {
     res.status(500).json({
@@ -143,7 +141,6 @@ export const deleteScheduled = async (req: Request, res: Response) => {
 
     if (found && foundMsgStr) {
       await redis.zrem(scheduledKey, foundMsgStr);
-      io.emit("messageDeleted", { id, ...deletedMsg });
       res.status(200).json({ success: true, id });
     } else {
       res.status(404).json({ error: "Message not found" });
