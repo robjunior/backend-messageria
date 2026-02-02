@@ -1,4 +1,3 @@
-dev/backend/src/services/tenantService.ts
 import { Request } from "express";
 
 /**

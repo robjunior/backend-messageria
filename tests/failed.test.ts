@@ -1,4 +1,3 @@
-dev/backend/tests/failed.test.ts
 import request from "supertest";
 import app from "../src/app";
 
