@@ -4,6 +4,6 @@ import * as deliveredController from "../controllers/deliveredController";
 const router = Router();
 
 // List all delivered messages
-router.get("/", deliveredController.getAllDelivered);
+router.get("/", deliveredController.listDeliveredMessages);
 
 export default router;
