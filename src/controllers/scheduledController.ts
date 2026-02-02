@@ -1,63 +1,85 @@
+dev / backend / src / controllers / scheduledController.ts;
 import { Request, Response } from "express";
 import { io } from "../server";
 import { getRedis } from "../services/redisService";
+import { getTenantId, tenantKey } from "../services/tenantService";
 import { v4 as uuidv4 } from "uuid";
 
-// Handler to schedule a new message
+/**
+ * Schedule a new message for a tenant
+ */
 export const scheduleMessage = async (req: Request, res: Response) => {
-  const { recipient, message, sendAt, channel } = req.body;
-
-  if (!recipient || !message || !sendAt || !channel) {
-    return res
-      .status(400)
-      .json({ error: "recipient, message, sendAt, and channel are required" });
-  }
-
-  const id = uuidv4();
-  const msgData = {
-    id,
-    recipient,
-    message,
-    sendAt,
-    channel,
-    status: "scheduled",
-    createdAt: new Date().toISOString(),
-  };
-
   try {
+    const tenantId = getTenantId(req);
+    const scheduledKey = tenantKey(tenantId, "scheduled_messages");
+
+    const { recipient, message, sendAt, channel } = req.body;
+    if (!recipient || !message || !sendAt || !channel) {
+      return res
+        .status(400)
+        .json({
+          error: "recipient, message, sendAt, and channel are required",
+        });
+    }
+
+    const id = uuidv4();
+    const msgData = {
+      id,
+      tenantId,
+      recipient,
+      message,
+      sendAt,
+      channel,
+      status: "scheduled",
+      createdAt: new Date().toISOString(),
+    };
+
     const redis = getRedis();
-    await redis.zadd("scheduled_messages", sendAt, JSON.stringify(msgData));
+    await redis.zadd(scheduledKey, sendAt, JSON.stringify(msgData));
     io.emit("messageScheduled", msgData);
     res.status(201).json({ success: true, id, data: msgData });
-  } catch (error) {
+  } catch (error: any) {
     res
       .status(500)
-      .json({ error: "Failed to schedule message", details: error });
+      .json({ error: "Failed to schedule message", details: error.message });
   }
 };
 
-// Handler to list all scheduled messages
-export const listScheduledMessages = async (_req: Request, res: Response) => {
+/**
+ * List all scheduled messages for a tenant
+ */
+export const getAllScheduled = async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
+    const scheduledKey = tenantKey(tenantId, "scheduled_messages");
+
     const redis = getRedis();
-    const results = await redis.zrange("scheduled_messages", 0, -1);
+    const results = await redis.zrange(scheduledKey, 0, -1);
     const messages = results.map((msgStr: string) => JSON.parse(msgStr));
     res.status(200).json({ messages });
-  } catch (error) {
+  } catch (error: any) {
     res
       .status(500)
-      .json({ error: "Failed to fetch scheduled messages", details: error });
+      .json({
+        error: "Failed to fetch scheduled messages",
+        details: error.message,
+      });
   }
 };
 
-// Handler to update a scheduled message by ID
-export const updateScheduledMessage = async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const { recipient, message, sendAt, channel } = req.body;
-
+/**
+ * Update a scheduled message by ID for a tenant
+ */
+export const updateScheduled = async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
+    const scheduledKey = tenantKey(tenantId, "scheduled_messages");
+
+    const { id } = req.params;
+    const { recipient, message, sendAt, channel } = req.body;
+
     const redis = getRedis();
-    const results = await redis.zrange("scheduled_messages", 0, -1);
+    const results = await redis.zrange(scheduledKey, 0, -1);
     let foundMsg: any = null;
     let foundMsgStr: string | null = null;
 
@@ -83,30 +105,39 @@ export const updateScheduledMessage = async (req: Request, res: Response) => {
       updatedAt: new Date().toISOString(),
     };
 
-    await redis.zrem("scheduled_messages", foundMsgStr);
+    await redis.zrem(scheduledKey, foundMsgStr);
     await redis.zadd(
-      "scheduled_messages",
+      scheduledKey,
       updatedMsg.sendAt,
       JSON.stringify(updatedMsg),
     );
     io.emit("messageUpdated", updatedMsg);
     res.status(200).json({ success: true, data: updatedMsg });
-  } catch (error) {
+  } catch (error: any) {
     res
       .status(500)
-      .json({ error: "Failed to update scheduled message", details: error });
+      .json({
+        error: "Failed to update scheduled message",
+        details: error.message,
+      });
   }
 };
 
-// Handler to delete a scheduled message by ID
-export const deleteScheduledMessage = async (req: Request, res: Response) => {
-  const { id } = req.params;
+/**
+ * Delete (cancel) a scheduled message by ID for a tenant
+ */
+export const deleteScheduled = async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
+    const scheduledKey = tenantKey(tenantId, "scheduled_messages");
+
+    const { id } = req.params;
     const redis = getRedis();
-    const results = await redis.zrange("scheduled_messages", 0, -1);
+    const results = await redis.zrange(scheduledKey, 0, -1);
     let found = false;
     let deletedMsg = null;
     let foundMsgStr: string | null = null;
+
     for (const msgStr of results) {
       const msg = JSON.parse(msgStr);
       if (msg.id === id) {
@@ -116,16 +147,20 @@ export const deleteScheduledMessage = async (req: Request, res: Response) => {
         break;
       }
     }
+
     if (found && foundMsgStr) {
-      await redis.zrem("scheduled_messages", foundMsgStr);
+      await redis.zrem(scheduledKey, foundMsgStr);
       io.emit("messageDeleted", { id, ...deletedMsg });
       res.status(200).json({ success: true, id });
     } else {
       res.status(404).json({ error: "Message not found" });
     }
-  } catch (error) {
+  } catch (error: any) {
     res
       .status(500)
-      .json({ error: "Failed to delete scheduled message", details: error });
+      .json({
+        error: "Failed to delete scheduled message",
+        details: error.message,
+      });
   }
 };
