@@ -38,7 +38,19 @@ async function pollAndDeliver() {
 
         console.log(`[DELIVERED] Message ID: ${msg.id}`);
       } else {
-        // Optionally, handle retries or move to a failed set
+        await redis.zrem("scheduled_messages", msgStr);
+
+        await redis.hset(
+          "failed_messages",
+          msg.id,
+          JSON.stringify({
+            ...msg,
+            status: "failed",
+            failedAt: new Date().toISOString(),
+            reason: "Simulated delivery failure",
+          }),
+        );
+
         console.error(`[FAILED DELIVERY] Message ID: ${msg.id}`);
       }
     }
