@@ -1,4 +1,3 @@
-dev/backend/src/routes/auth.ts
 import { Router } from "express";
 import * as authController from "../controllers/authController";
 
