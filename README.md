@@ -45,6 +45,7 @@ Create a `.env` file (optional, defaults are provided):
 ```
 PORT=4000
 REDIS_URL=redis://localhost:6379
+JWT_SECRET=uma_senha_segura_aqui
 ```
 
 ### 4. Start Redis
@@ -86,51 +87,261 @@ tests/                  # Jest/Supertest test suites
 
 ---
 
-## API Endpoints
+## API Endpoints & Front-End Integration Guide
+
+### Autenticação
+
+- **POST /auth/register**
+  - Cria um novo usuário.
+  - Body:
+    ```json
+    {
+      "email": "user@email.com",
+      "password": "senha123",
+      "name": "Nome do Usuário"
+    }
+    ```
+  - Resposta:
+    ```json
+    { "id": "...", "email": "...", "name": "..." }
+    ```
+
+- **POST /auth/login**
+  - Autentica usuário e retorna JWT.
+  - Body:
+    ```json
+    {
+      "email": "user@email.com",
+      "password": "senha123"
+    }
+    ```
+  - Resposta:
+    ```json
+    {
+      "token": "<jwt>",
+      "user": { "id": "...", "email": "...", "name": "..." }
+    }
+    ```
+
+  > **Importante:** Guarde o JWT para enviar no header `Authorization: Bearer <jwt>` nas rotas protegidas.
+
+---
+
+### Organizações
+
+- **POST /orgs**
+  - Cria uma nova organização e adiciona o usuário autenticado como admin.
+  - Headers: `Authorization: Bearer <jwt>`
+  - Body:
+    ```json
+    { "name": "Nome da Organização" }
+    ```
+  - Resposta:
+    ```json
+    {
+      "org": { "id": "...", "name": "...", "ownerUserId": "..." },
+      "membership": { "userId": "...", "orgId": "...", "role": "admin" }
+    }
+    ```
+
+- **POST /orgs/:orgId/invite**
+  - Convida um usuário para uma organização.
+  - Headers: `Authorization: Bearer <jwt>`
+  - Body:
+    ```json
+    { "email": "convidado@email.com", "role": "member" }
+    ```
+  - Resposta:
+    ```json
+    { "invite": { ... }, "inviteToken": "<token>" }
+    ```
+
+- **POST /orgs/accept-invite**
+  - Aceita um convite para organização.
+  - Body:
+    ```json
+    { "inviteToken": "<token recebido>" }
+    ```
+  - Resposta:
+    ```json
+    { "orgId": "...", "userId": "...", "role": "member" }
+    ```
+
+---
+
+### Mensagens Agendadas
+
+> **Todas as rotas abaixo exigem o header:**  
+> `x-tenant-id: <orgId>`
+
+- **GET /scheduled**
+  - Lista todas as mensagens agendadas do tenant.
+  - Headers: `x-tenant-id: <orgId>`
+
+- **POST /scheduled**
+  - Agenda uma nova mensagem.
+  - Headers: `x-tenant-id: <orgId>`
+  - Body:
+    ```json
+    {
+      "recipient": "5511999999999",
+      "message": "Olá!",
+      "sendAt": 1735689600000,
+      "channel": "whatsapp"
+    }
+    ```
+  - Resposta:
+    ```json
+    { "success": true, "id": "...", "data": { ... } }
+    ```
+
+- **PUT /scheduled/:id**
+  - Atualiza uma mensagem agendada.
+  - Headers: `x-tenant-id: <orgId>`
+  - Body: Campos a atualizar.
+  - Resposta:
+    ```json
+    { "success": true, "data": { ... } }
+    ```
+
+- **DELETE /scheduled/:id**
+  - Cancela uma mensagem agendada.
+  - Headers: `x-tenant-id: <orgId>`
+  - Resposta:
+    ```json
+    { "success": true, "id": "..." }
+    ```
+
+---
+
+### Mensagens Entregues e Falhas
+
+- **GET /delivered**
+  - Lista todas as mensagens entregues.
+  - Resposta:
+    ```json
+    { "messages": [ ... ] }
+    ```
+
+- **GET /failed**
+  - Lista todas as mensagens que falharam.
+  - Resposta:
+    ```json
+    { "messages": [ ... ] }
+    ```
+
+---
 
 ### Health
 
 - **GET /health**  
-  Returns server and Redis status.
+  Retorna status do servidor e Redis.
+  - Resposta:
+    ```json
+    { "status": "ok", "redis": "connected" }
+    ```
 
 ---
 
-### Scheduled Messages
+## Fluxo de Integração Front-End
 
-- **GET /scheduled**  
-  List all scheduled messages.
-
-- **POST /scheduled**  
-  Schedule a new message.  
-  **Body:**
-  ```json
-  {
-    "recipient": "5511999999999",
-    "message": "Hello from the API!",
-    "sendAt": 1735689600000,
-    "channel": "whatsapp"
-  }
-  ```
-
-- **PUT /scheduled/:id**  
-  Update a scheduled message.  
-  **Body:** (any updatable field)
-  ```json
-  {
-    "message": "Updated message",
-    "channel": "sms"
-  }
-  ```
-
-- **DELETE /scheduled/:id**  
-  Cancel a scheduled message.
+1. **Registrar usuário:** `POST /auth/register`
+2. **Login:** `POST /auth/login` (guarde o JWT)
+3. **Criar organização:** `POST /orgs` (com JWT)
+4. **Convidar usuário:** `POST /orgs/:orgId/invite` (com JWT)
+5. **Aceitar convite:** `POST /orgs/accept-invite` (com token do convite)
+6. **Agendar mensagens:** `POST /scheduled` (com `x-tenant-id`)
+7. **Consultar entregas/falhas:** `GET /delivered`, `GET /failed`
 
 ---
 
-### Delivered Messages
+## Headers Importantes
 
-- **GET /delivered**  
-  List all delivered messages.
+- **Authorization:**  
+  Para rotas protegidas, envie:  
+  `Authorization: Bearer <jwt>`
+
+- **x-tenant-id:**  
+  Para rotas multi-tenant (mensagens), envie:  
+  `x-tenant-id: <orgId>`
+
+---
+
+## Padronização de Respostas de Erro
+
+- Erros sempre retornam:
+  ```json
+  { "error": "Mensagem do erro", "details": "Detalhes (opcional)" }
+  ```
+  - Exemplo: usuário não autenticado
+    ```json
+    { "error": "Invalid or missing token" }
+    ```
+
+---
+
+## Socket.IO – Atualizações em Tempo Real
+
+- Conecte-se via Socket.IO no mesmo host/porta do backend.
+- Eventos emitidos:
+  - `messageScheduled`
+  - `messageUpdated`
+  - `messageDeleted`
+
+  Exemplo de conexão (front-end JS):
+  ```js
+  import { io } from "socket.io-client";
+  const socket = io("http://localhost:4000");
+  socket.on("messageScheduled", (msg) => { /* ... */ });
+  ```
+
+---
+
+## Exemplos de Requisições (cURL)
+
+**Registrar:**
+```sh
+curl -X POST http://localhost:4000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@email.com","password":"senha123","name":"Usuário"}'
+```
+
+**Login:**
+```sh
+curl -X POST http://localhost:4000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@email.com","password":"senha123"}'
+```
+
+**Criar organização:**
+```sh
+curl -X POST http://localhost:4000/orgs \
+  -H "Authorization: Bearer <jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Minha Empresa"}'
+```
+
+**Agendar mensagem:**
+```sh
+curl -X POST http://localhost:4000/scheduled \
+  -H "x-tenant-id: <orgId>" \
+  -H "Content-Type: application/json" \
+  -d '{"recipient":"5511999999999","message":"Olá!","sendAt":1735689600000,"channel":"whatsapp"}'
+```
+
+---
+
+## Dicas de Desenvolvimento
+
+- Use [Postman](https://www.postman.com/) ou [httpie](https://httpie.io/) para testar a API.
+- O worker em `src/workers/deliverMessages.ts` simula a entrega de mensagens.
+- Para expandir: adicione novos canais, autenticação, integrações de entrega, etc.
+
+---
+
+## License
+
+MIT
 
 ---
 
