@@ -7,6 +7,7 @@ import orgRoutes from "./routes/orgs";
 
 const app = express();
 
+app.use(express.json());
 app.use("/orgs", orgRoutes);
 
 // Routes

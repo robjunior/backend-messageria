@@ -35,6 +35,7 @@ export const scheduleMessage = async (req: Request, res: Response) => {
     await redis.zadd(scheduledKey, sendAt, JSON.stringify(msgData));
     res.status(201).json({ success: true, id, data: msgData });
   } catch (error: any) {
+    console.error(error); // Add this line
     res
       .status(500)
       .json({ error: "Failed to schedule message", details: error.message });

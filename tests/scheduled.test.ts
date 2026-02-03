@@ -1,9 +1,32 @@
 import request from "supertest";
 import app from "../src/app";
+import { getRedis } from "../src/services/redisService";
+import { v4 as uuidv4 } from "uuid";
 
 describe("Scheduled Messages Endpoints", () => {
   let scheduledId: string;
-  const tenantHeader = { "x-tenant-id": "test-tenant" };
+  let tenantHeader: any;
+
+  beforeAll(async () => {
+    const redis = getRedis();
+    // Create user
+    const user = {
+      id: uuidv4(),
+      email: "testuser@example.com",
+      name: "Test User",
+      passwordHash: "fakehash",
+    };
+    await redis.hset("users", user.email, JSON.stringify(user));
+    // Create org
+    const orgId = uuidv4();
+    const org = { id: orgId, name: "Test Org", ownerUserId: user.id };
+    await redis.hset("orgs", orgId, JSON.stringify(org));
+    // Membership
+    await redis.sadd(`memberships:${user.id}`, orgId);
+    await redis.sadd(`org_members:${orgId}`, user.id);
+    await redis.hset(`org_roles:${orgId}`, user.id, "admin");
+    tenantHeader = { "x-tenant-id": orgId };
+  });
 
   it("POST /scheduled should schedule a new message", async () => {
     const res = await request(app)
