@@ -3,36 +3,36 @@ import { v4 as uuidv4 } from "uuid";
 import { getRedis } from "../services/redisService";
 import jwt from "jsonwebtoken";
 
+// Helper to extract userId from JWT
+function getUserIdFromRequest(req: Request): string | null {
+  const auth = req.headers.authorization;
+  if (!auth) return null;
+  const token = auth.replace("Bearer ", "");
+  try {
+    const decoded: any = jwt.decode(token);
+    return decoded?.userId || null;
+  } catch {
+    return null;
+  }
+}
+
 export const createOrg = async (req: Request, res: Response) => {
   try {
     const { name } = req.body;
     if (!name)
       return res.status(400).json({ error: "Organization name required" });
 
-    // Retrieve authenticated user from JWT
-    const auth = req.headers.authorization;
-    if (!auth) return res.status(401).json({ error: "Missing token" });
-    const token = auth.replace("Bearer ", "");
-    let decoded: any;
-    try {
-      decoded = jwt.decode(token);
-    } catch {
-      return res.status(401).json({ error: "Invalid token" });
-    }
-    const userId = decoded?.userId;
-    const email = decoded?.email;
-    if (!userId) return res.status(401).json({ error: "Invalid token" });
+    const userId = getUserIdFromRequest(req);
+    if (!userId)
+      return res.status(401).json({ error: "Invalid or missing token" });
 
     const redis = getRedis();
     const orgId = uuidv4();
     const org = { id: orgId, name, ownerUserId: userId };
     await redis.hset("orgs", orgId, JSON.stringify(org));
 
-    // Membership: userId <-> orgId
     await redis.sadd(`memberships:${userId}`, orgId);
     await redis.sadd(`org_members:${orgId}`, userId);
-
-    // Optionally: save role/admin
     await redis.hset(`org_roles:${orgId}`, userId, "admin");
 
     res.status(201).json({ org, membership: { userId, orgId, role: "admin" } });
@@ -43,10 +43,6 @@ export const createOrg = async (req: Request, res: Response) => {
   }
 };
 
-import { v4 as uuidv4 } from "uuid";
-import bcrypt from "bcryptjs";
-
-// Invite a user to an organization
 export const inviteUserToOrg = async (req: Request, res: Response) => {
   try {
     const { orgId } = req.params;
@@ -57,14 +53,16 @@ export const inviteUserToOrg = async (req: Request, res: Response) => {
         .json({ error: "Organization ID and email required" });
     }
 
+    const userId = getUserIdFromRequest(req);
+    if (!userId)
+      return res.status(401).json({ error: "Invalid or missing token" });
+
     const redis = getRedis();
-    // Check if org exists
     const orgStr = await redis.hget("orgs", orgId);
     if (!orgStr) {
       return res.status(404).json({ error: "Organization not found" });
     }
 
-    // Generate invite token
     const inviteId = uuidv4();
     const token = uuidv4();
     const invite = {
@@ -72,24 +70,21 @@ export const inviteUserToOrg = async (req: Request, res: Response) => {
       orgId,
       email,
       role,
-      invitedByUserId: req.userId || null, // Optionally set by middleware
+      invitedByUserId: userId,
       status: "pending",
       token,
       createdAt: new Date().toISOString(),
     };
 
-    // Save invite
     await redis.hset("invites", inviteId, JSON.stringify(invite));
-    await redis.hset(`invite_tokens`, token, inviteId);
+    await redis.hset("invite_tokens", token, inviteId);
 
-    // (Future: send email with token link)
     res.status(201).json({ invite, inviteToken: token });
   } catch (err: any) {
     res.status(500).json({ error: "Invite failed", details: err.message });
   }
 };
 
-// Accept an organization invite
 export const acceptInvite = async (req: Request, res: Response) => {
   try {
     const { inviteToken } = req.body;
@@ -123,12 +118,10 @@ export const acceptInvite = async (req: Request, res: Response) => {
     }
     const user = JSON.parse(userStr);
 
-    // Create membership
     await redis.sadd(`memberships:${user.id}`, invite.orgId);
     await redis.sadd(`org_members:${invite.orgId}`, user.id);
     await redis.hset(`org_roles:${invite.orgId}`, user.id, invite.role);
 
-    // Mark invite as accepted
     invite.status = "accepted";
     invite.acceptedAt = new Date().toISOString();
     await redis.hset("invites", inviteId, JSON.stringify(invite));
