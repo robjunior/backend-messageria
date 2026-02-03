@@ -4,12 +4,14 @@ import deliveredRoutes from "./routes/delivered";
 import healthRoutes from "./routes/health";
 import failedRoutes from "./routes/failed";
 import orgRoutes from "./routes/orgs";
+import integrationRoutes from "./routes/integrations";
 import authRoutes from "./routes/auth";
 
 const app = express();
 
 app.use(express.json());
 app.use("/orgs", orgRoutes);
+app.use("/integrations", integrationRoutes);
 app.use("/auth", authRoutes);
 
 // Routes
