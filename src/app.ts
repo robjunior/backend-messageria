@@ -3,10 +3,12 @@ import scheduledRoutes from "./routes/scheduled";
 import deliveredRoutes from "./routes/delivered";
 import healthRoutes from "./routes/health";
 import failedRoutes from "./routes/failed";
+import orgRoutes from "./routes/orgs";
 
 const app = express();
 
 app.use(express.json());
+app.use("/orgs", orgRoutes);
 
 // Routes
 app.use("/scheduled", scheduledRoutes);
