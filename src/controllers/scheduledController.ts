@@ -1,5 +1,9 @@
 import { Request, Response } from "express";
 
+type AuthRequest = Request & {
+  user?: { userId: string; email: string; name: string };
+};
+
 import { getRedis } from "../services/redisService";
 import { getTenantId, tenantKey } from "../services/tenantService";
 import { v4 as uuidv4 } from "uuid";
@@ -12,23 +16,35 @@ export const scheduleMessage = async (req: Request, res: Response) => {
     const tenantId = getTenantId(req);
     const scheduledKey = tenantKey(tenantId, "scheduled_messages");
 
-    const { recipient, message, sendAt, channel } = req.body;
-    if (!recipient || !message || !sendAt || !channel) {
+    const { recipient, message, sendAt, channel, type, isDraft, isDeleted } =
+      req.body;
+    const authReq = req as AuthRequest;
+    const authorId = authReq.user?.userId || req.header("x-user-id"); // Suporte para JWT ou header manual
+    const orgId = tenantId;
+
+    if (!recipient || !message || !sendAt || !channel || !type || !authorId) {
       return res.status(400).json({
-        error: "recipient, message, sendAt, and channel are required",
+        error:
+          "recipient, message, sendAt, channel, type, and authorId are required",
       });
     }
 
     const id = uuidv4();
+    const now = new Date().toISOString();
     const msgData = {
       id,
-      tenantId,
+      orgId,
+      authorId,
       recipient,
       message,
       sendAt,
       channel,
-      status: "scheduled",
-      createdAt: new Date().toISOString(),
+      type,
+      status: isDraft ? "draft" : "scheduled",
+      isDraft: !!isDraft,
+      isDeleted: !!isDeleted,
+      createdAt: now,
+      updatedAt: now,
     };
 
     const redis = getRedis();
@@ -71,7 +87,16 @@ export const updateScheduled = async (req: Request, res: Response) => {
     const scheduledKey = tenantKey(tenantId, "scheduled_messages");
 
     const { id } = req.params;
-    const { recipient, message, sendAt, channel } = req.body;
+    const {
+      recipient,
+      message,
+      sendAt,
+      channel,
+      type,
+      isDraft,
+      isDeleted,
+      status,
+    } = req.body;
 
     const redis = getRedis();
     const results = await redis.zrange(scheduledKey, 0, -1);
@@ -97,6 +122,11 @@ export const updateScheduled = async (req: Request, res: Response) => {
       message: message ?? foundMsg.message,
       sendAt: sendAt ?? foundMsg.sendAt,
       channel: channel ?? foundMsg.channel,
+      type: type ?? foundMsg.type,
+      isDraft: typeof isDraft === "boolean" ? isDraft : foundMsg.isDraft,
+      isDeleted:
+        typeof isDeleted === "boolean" ? isDeleted : foundMsg.isDeleted,
+      status: status ?? foundMsg.status,
       updatedAt: new Date().toISOString(),
     };
 
